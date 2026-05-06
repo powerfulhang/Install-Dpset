@@ -567,12 +567,25 @@ Write-Host "[3/4] Written: $BAT_PATH" -ForegroundColor Green
 $userPath  = [Environment]::GetEnvironmentVariable("PATH", "User")
 if ($null -eq $userPath) { $userPath = "" }
 
-$pathParts = $userPath -split ";" | Where-Object { $_.Trim() -ne "" }
+# Normalize PATH: split by ; and by missing separators (e.g. "DirAC:\DirB")
+$rawParts = $userPath -split ";"
+$expanded = foreach ($rp in $rawParts) {
+    # Split entries that are missing ; between paths (e.g. "C:\AC:\B")
+    ($rp -split "(?=C:\\)") | Where-Object { $_.Trim() -ne "" }
+}
+$pathParts = @()
+$seen = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+foreach ($p in $expanded) {
+    $t = $p.Trim()
+    if ($t -ne "" -and $seen.Add($t)) { $pathParts += $t }
+}
 
 if ($pathParts -contains $INSTALL_DIR) {
     Write-Host "[4/4] '$INSTALL_DIR' is already in User PATH." -ForegroundColor Gray
 } else {
-    $newPath = ($pathParts + $INSTALL_DIR) -join ";"
+    $pathParts += $INSTALL_DIR
+    $newPath = $pathParts -join ";"
     [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
     Write-Host "[4/4] Added '$INSTALL_DIR' to User PATH." -ForegroundColor Green
 }
